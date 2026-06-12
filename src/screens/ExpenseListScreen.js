@@ -9,17 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { getExpenses, deleteExpense } from '../utils/storage';
-
-const CATEGORY_COLORS = {
-  Milk: '#4ECDC4',
-  House: '#FF6B6B',
-  Food: '#FFE66D',
-  Transport: '#6C63FF',
-  Entertainment: '#FF8C42',
-  Health: '#95D5B2',
-  Other: '#ADB5BD',
-};
+import { getExpenses, deleteExpense, getCategoryMeta } from '../utils/storage';
 
 export default function ExpenseListScreen() {
   const [expenses, setExpenses] = useState([]);
@@ -89,11 +79,12 @@ export default function ExpenseListScreen() {
   }
 
   const renderItem = ({ item }) => {
-    const color = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Other;
+    const meta = getCategoryMeta(item.category);
     return (
       <View style={styles.item}>
         <View style={styles.itemLeft}>
-          <View style={[styles.badge, { backgroundColor: color }]}>
+          <View style={[styles.badge, { backgroundColor: meta.color }]}>
+            <Text style={styles.badgeIcon}>{meta.icon}</Text>
             <Text style={styles.badgeText}>{item.category}</Text>
           </View>
           <View style={styles.itemDetails}>
@@ -198,10 +189,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     marginRight: 12,
+    minWidth: 90,
+  },
+  badgeIcon: {
+    fontSize: 13,
+    marginRight: 4,
   },
   badgeText: {
     color: '#fff',
