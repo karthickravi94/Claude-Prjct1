@@ -10,19 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { addExpense } from '../utils/storage';
-
-const CATEGORIES = ['Milk', 'House', 'Food', 'Transport', 'Entertainment', 'Health', 'Other'];
-
-const CATEGORY_COLORS = {
-  Milk: '#4ECDC4',
-  House: '#FF6B6B',
-  Food: '#FFE66D',
-  Transport: '#6C63FF',
-  Entertainment: '#FF8C42',
-  Health: '#95D5B2',
-  Other: '#ADB5BD',
-};
+import { addExpense, CATEGORIES } from '../utils/storage';
 
 const getTodayString = () => {
   const d = new Date();
@@ -33,7 +21,7 @@ const getTodayString = () => {
 };
 
 export default function AddExpenseScreen() {
-  const [category, setCategory] = useState('Food');
+  const [category, setCategory] = useState(CATEGORIES[2].label); // Food
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(getTodayString());
   const [note, setNote] = useState('');
@@ -83,26 +71,26 @@ export default function AddExpenseScreen() {
           <Text style={styles.label}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer}>
             {CATEGORIES.map((cat) => {
-              const isSelected = category === cat;
-              const color = CATEGORY_COLORS[cat];
+              const isSelected = category === cat.label;
               return (
                 <TouchableOpacity
-                  key={cat}
+                  key={cat.label}
                   style={[
                     styles.pill,
-                    { borderColor: color },
-                    isSelected && { backgroundColor: color },
+                    { borderColor: cat.color },
+                    isSelected && { backgroundColor: cat.color },
                   ]}
-                  onPress={() => setCategory(cat)}
+                  onPress={() => setCategory(cat.label)}
                   activeOpacity={0.7}
                 >
+                  <Text style={styles.pillIcon}>{cat.icon}</Text>
                   <Text
                     style={[
                       styles.pillText,
-                      { color: isSelected ? '#fff' : color },
+                      { color: isSelected ? '#fff' : cat.color },
                     ]}
                   >
-                    {cat}
+                    {cat.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -202,11 +190,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   pill: {
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 2,
     marginRight: 8,
+  },
+  pillIcon: {
+    fontSize: 15,
+    marginRight: 5,
   },
   pillText: {
     fontSize: 14,

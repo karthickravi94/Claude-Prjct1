@@ -2,6 +2,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@expenses';
 
+export const CATEGORIES = [
+  { label: 'Milk',          icon: '🥛', color: '#4ECDC4' },
+  { label: 'House',         icon: '🏠', color: '#FF6B6B' },
+  { label: 'Food',          icon: '🍔', color: '#F4A261' },
+  { label: 'Transport',     icon: '🚗', color: '#6C63FF' },
+  { label: 'Entertainment', icon: '🎬', color: '#FF8C42' },
+  { label: 'Health',        icon: '💊', color: '#52B788' },
+  { label: 'Other',         icon: '📦', color: '#ADB5BD' },
+];
+
+export const CATEGORY_COLORS = Object.fromEntries(
+  CATEGORIES.map((c) => [c.label, c.color])
+);
+
+export const getCategoryMeta = (label) =>
+  CATEGORIES.find((c) => c.label === label) || CATEGORIES[CATEGORIES.length - 1];
+
 export const getExpenses = async () => {
   try {
     const json = await AsyncStorage.getItem(STORAGE_KEY);
