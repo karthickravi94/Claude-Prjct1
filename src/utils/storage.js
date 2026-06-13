@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js/dist/index.cjs';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config';
 
 const STORAGE_KEY = '@expenses';
 
@@ -34,6 +36,19 @@ export const getCategoryMeta = (label) =>
   CATEGORIES.find((c) => c.label === label) || CATEGORIES[CATEGORIES.length - 1];
 
 export const getExpenses = async () => {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    try {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+      if (error) throw error;
+      return data.map((item) => ({
+        ...item,
+        amount: Number(item.amount),
+      }));
+    } catch (e) {
+      console.warn('Supabase fetch failed, falling back to local storage', e);
+    }
+  }
   try {
     const json = await store.getItem(STORAGE_KEY);
     return json != null ? JSON.parse(json) : [];
@@ -43,13 +58,27 @@ export const getExpenses = async () => {
 };
 
 export const saveExpenses = async (expenses) => {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    try {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      await supabase.from('expenses').delete();
+      const rows = expenses.map((expense) => ({
+        ...expense,
+        amount: Number(expense.amount),
+      }));
+      const { error } = await supabase.from('expenses').insert(rows);
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Supabase save failed, falling back to local storage', e);
+    }
+  }
   await store.setItem(STORAGE_KEY, JSON.stringify(expenses));
 };
 
 export const addExpense = async (expense) => {
   const expenses = await getExpenses();
   const newExpense = {
-    id: Date.now().toString(),
+    id: Date.now(),
     category: expense.category,
     amount: parseFloat(expense.amount),
     date: expense.date,
@@ -61,7 +90,8 @@ export const addExpense = async (expense) => {
 
 export const deleteExpense = async (id) => {
   const expenses = await getExpenses();
-  const updated = expenses.filter((e) => e.id !== id);
+  const idString = String(id);
+  const updated = expenses.filter((e) => String(e.id) !== idString);
   await saveExpenses(updated);
   return updated;
 };

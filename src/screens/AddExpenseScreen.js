@@ -26,12 +26,20 @@ export default function AddExpenseScreen() {
   const [date, setDate] = useState(getTodayString());
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success');
 
   const resetForm = () => {
     setCategory('Food');
     setAmount('');
     setDate(getTodayString());
     setNote('');
+  };
+
+  const showMessage = (text, type = 'success') => {
+    setMessage(text);
+    setMessageType(type);
+    setTimeout(() => setMessage(''), 3000);
   };
 
   const handleSubmit = async () => {
@@ -50,9 +58,10 @@ export default function AddExpenseScreen() {
     setSubmitting(true);
     try {
       await addExpense({ category, amount: parsedAmount, date, note });
-      Alert.alert('Success', 'Expense added!', [{ text: 'OK', onPress: resetForm }]);
+      resetForm();
+      showMessage('Expense added successfully!', 'success');
     } catch (error) {
-      Alert.alert('Error', 'Failed to save expense. Please try again.');
+      showMessage('Failed to save expense. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -65,6 +74,13 @@ export default function AddExpenseScreen() {
     >
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>New Expense</Text>
+        {message ? (
+          <View style={[styles.messageBox, messageType === 'success' ? styles.successBox : styles.errorBox]}>
+            <Text style={[styles.messageText, messageType === 'success' ? styles.successText : styles.errorText]}>
+              {message}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Category Picker */}
         <View style={styles.fieldGroup}>
@@ -248,6 +264,32 @@ const styles = StyleSheet.create({
   noteInput: {
     minHeight: 80,
     paddingTop: 12,
+  },
+  messageBox: {
+    backgroundColor: '#EFF7FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C6E0FF',
+  },
+  successBox: {
+    backgroundColor: '#E8F6EF',
+    borderColor: '#7FD1A7',
+  },
+  errorBox: {
+    backgroundColor: '#FDECEA',
+    borderColor: '#F1A6A0',
+  },
+  messageText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  successText: {
+    color: '#1B6E37',
+  },
+  errorText: {
+    color: '#A33A3A',
   },
   button: {
     backgroundColor: '#6C63FF',

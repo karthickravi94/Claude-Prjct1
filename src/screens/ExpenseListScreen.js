@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getExpenses, deleteExpense, getCategoryMeta } from '../utils/storage';
@@ -14,6 +15,14 @@ import { getExpenses, deleteExpense, getCategoryMeta } from '../utils/storage';
 export default function ExpenseListScreen() {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState('success');
+
+  const showStatus = (text, type = 'success') => {
+    setStatusMessage(text);
+    setStatusType(type);
+    setTimeout(() => setStatusMessage(''), 3000);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -28,7 +37,25 @@ export default function ExpenseListScreen() {
     }, [])
   );
 
+  const performDelete = async (id) => {
+    try {
+      await deleteExpense(id);
+      setExpenses((prev) => prev.filter((item) => item.id !== id));
+      showStatus('Expense deleted successfully.', 'success');
+    } catch (error) {
+      showStatus('Failed to delete expense.', 'error');
+    }
+  };
+
   const handleDelete = (id, category, amount) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Delete $${parseFloat(amount).toFixed(2)} for ${category}?`);
+      if (confirmed) {
+        performDelete(id);
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete Expense',
       `Delete $${parseFloat(amount).toFixed(2)} for ${category}?`,
@@ -37,15 +64,7 @@ export default function ExpenseListScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const updated = await deleteExpense(id);
-              const sorted = [...updated].sort((a, b) => new Date(b.date) - new Date(a.date));
-              setExpenses(sorted);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete expense.');
-            }
-          },
+          onPress: () => performDelete(id),
         },
       ]
     );
@@ -108,9 +127,16 @@ export default function ExpenseListScreen() {
 
   return (
     <View style={styles.container}>
+      {statusMessage ? (
+        <View style={[styles.statusBox, statusType === 'success' ? styles.successBox : styles.errorBox]}>
+          <Text style={[styles.statusText, statusType === 'success' ? styles.successText : styles.errorText]}>
+            {statusMessage}
+          </Text>
+        </View>
+      ) : null}
       <FlatList
         data={expenses}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -241,6 +267,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  statusBox: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  successBox: {
+    backgroundColor: '#E8F6EF',
+    borderColor: '#7FD1A7',
+  },
+  errorBox: {
+    backgroundColor: '#FDECEA',
+    borderColor: '#F1A6A0',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  successText: {
+    color: '#1B6E37',
+  },
+  errorText: {
+    color: '#A33A3A',
   },
   separator: {
     height: 10,
