@@ -4,14 +4,13 @@ import {
   StyleSheet, Alert, KeyboardAvoidingView, Platform, Dimensions, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { addExpense, CATEGORIES } from '../utils/storage';
-// categories now use Ionicons names in the `icon` field
+import { addSaving, SAVINGS_CATEGORIES } from '../utils/storage';
 import Button from '../components/ui/Button';
 import FadeSlideIn from '../components/ui/FadeSlideIn';
 import { colors, shadows, radius, typography } from '../theme';
 
 const { width: W } = Dimensions.get('window');
-const TILE_SIZE = (W - 40 - 12 * 3) / 4;
+const TILE_SIZE = (W - 40 - 12 * 2) / 3;
 
 const toDateStr = (d) => {
   const y  = d.getFullYear();
@@ -20,7 +19,6 @@ const toDateStr = (d) => {
   return `${y}-${m}-${dy}`;
 };
 
-// Category tile with spring-scale animation
 function CategoryTile({ cat, isSelected, onPress }) {
   const scale = useRef(new Animated.Value(isSelected ? 1.04 : 1)).current;
 
@@ -47,7 +45,7 @@ function CategoryTile({ cat, isSelected, onPress }) {
           <Ionicons name={cat.icon} size={22} color={isSelected ? cat.color : colors.textMuted} />
         </View>
         <Text style={[S.catTileLabel, { color: isSelected ? cat.color : colors.textMuted }]}>
-          {cat.label.split(' ')[0]}
+          {cat.short}
         </Text>
         {isSelected && <View style={[S.selDot, { backgroundColor: cat.color }]} />}
       </TouchableOpacity>
@@ -55,13 +53,13 @@ function CategoryTile({ cat, isSelected, onPress }) {
   );
 }
 
-export default function AddExpenseScreen() {
-  const [category, setCategory] = useState(CATEGORIES[0].label);
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [note, setNote] = useState('');
+export default function AddSavingScreen({ navigation }) {
+  const [category, setCategory]   = useState(SAVINGS_CATEGORIES[0].label);
+  const [amount, setAmount]       = useState('');
+  const [name, setName]           = useState('');
+  const [date, setDate]           = useState(new Date());
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast]         = useState(null);
 
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok });
@@ -69,10 +67,10 @@ export default function AddExpenseScreen() {
   };
 
   const reset = () => {
-    setCategory(CATEGORIES[0].label);
+    setCategory(SAVINGS_CATEGORIES[0].label);
     setAmount('');
+    setName('');
     setDate(new Date());
-    setNote('');
   };
 
   const submit = async () => {
@@ -83,9 +81,10 @@ export default function AddExpenseScreen() {
     }
     setSubmitting(true);
     try {
-      await addExpense({ category, amount: v, date: toDateStr(date), note });
+      await addSaving({ name: name.trim(), category, amount: v, date: toDateStr(date) });
       reset();
-      showToast('Expense added!', true);
+      showToast('Saving added!', true);
+      setTimeout(() => navigation.goBack(), 900);
     } catch {
       showToast('Failed to save. Try again.', false);
     } finally {
@@ -93,7 +92,7 @@ export default function AddExpenseScreen() {
     }
   };
 
-  const selMeta = CATEGORIES.find(c => c.label === category) || CATEGORIES[0];
+  const selMeta = SAVINGS_CATEGORIES.find(c => c.label === category) || SAVINGS_CATEGORIES[0];
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -103,7 +102,6 @@ export default function AddExpenseScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-
         {/* Toast */}
         {toast && (
           <FadeSlideIn dy={-8}>
@@ -121,7 +119,7 @@ export default function AddExpenseScreen() {
           </FadeSlideIn>
         )}
 
-        {/* Amount — large, prominent */}
+        {/* Amount */}
         <FadeSlideIn delay={0}>
           <View style={S.amountSection}>
             <Text style={S.eyebrow}>AMOUNT</Text>
@@ -137,7 +135,6 @@ export default function AddExpenseScreen() {
                 selectionColor={colors.violet}
               />
             </View>
-            {/* Selected category badge */}
             <View style={[S.catBadge, { backgroundColor: selMeta.color + '20' }]}>
               <Ionicons name={selMeta.icon} size={14} color={selMeta.color} />
               <Text style={[S.catBadgeText, { color: selMeta.color }]}>{selMeta.label}</Text>
@@ -145,25 +142,24 @@ export default function AddExpenseScreen() {
           </View>
         </FadeSlideIn>
 
-        {/* Description */}
+        {/* Name / Label */}
         <FadeSlideIn delay={60}>
-          <Text style={S.sectionLabel}>DESCRIPTION</Text>
+          <Text style={S.sectionLabel}>NAME / LABEL</Text>
           <TextInput
             style={S.descInput}
-            value={note}
-            onChangeText={setNote}
-            placeholder="What did you spend on?"
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. HDFC FD, Nifty 50 ETF…"
             placeholderTextColor={colors.textDisabled}
             selectionColor={colors.violet}
-            multiline={false}
           />
         </FadeSlideIn>
 
-        {/* Category grid */}
+        {/* Category grid — 3 per row */}
         <FadeSlideIn delay={120}>
           <Text style={S.sectionLabel}>CATEGORY</Text>
           <View style={S.catGrid}>
-            {CATEGORIES.filter(c => c.label !== 'Other').map(cat => (
+            {SAVINGS_CATEGORIES.map(cat => (
               <CategoryTile
                 key={cat.label}
                 cat={cat}
@@ -171,27 +167,6 @@ export default function AddExpenseScreen() {
                 onPress={() => setCategory(cat.label)}
               />
             ))}
-            {/* Other tile */}
-            <Animated.View style={{ width: TILE_SIZE }}>
-              <TouchableOpacity
-                style={[
-                  S.catTile,
-                  category === 'Other' && { borderColor: '#8E8E93', backgroundColor: 'rgba(142,142,147,0.12)' },
-                ]}
-                onPress={() => setCategory('Other')}
-                activeOpacity={0.75}
-              >
-                <View style={[S.catIconCircle, {
-                  backgroundColor: category === 'Other' ? 'rgba(142,142,147,0.3)' : 'rgba(142,142,147,0.15)',
-                }]}>
-                  <Ionicons name="add" size={20} color={category === 'Other' ? '#fff' : colors.textMuted} />
-                </View>
-                <Text style={[S.catTileLabel, { color: category === 'Other' ? '#8E8E93' : colors.textMuted }]}>
-                  Other
-                </Text>
-                {category === 'Other' && <View style={[S.selDot, { backgroundColor: '#8E8E93' }]} />}
-              </TouchableOpacity>
-            </Animated.View>
           </View>
         </FadeSlideIn>
 
@@ -199,13 +174,12 @@ export default function AddExpenseScreen() {
         <FadeSlideIn delay={180}>
           <Button
             variant="primary"
-            label={submitting ? 'Saving…' : 'Save Expense'}
+            label={submitting ? 'Saving…' : 'Add to Portfolio'}
             onPress={submit}
             loading={submitting}
             disabled={submitting}
           />
         </FadeSlideIn>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -223,7 +197,6 @@ const S = StyleSheet.create({
   toastErr: { backgroundColor: colors.errorLight,   borderColor: colors.errorBorder },
   toastText:{ ...typography.captionMedium },
 
-  // Amount section
   amountSection: {
     backgroundColor: colors.surface2,
     borderRadius: radius['2xl'],

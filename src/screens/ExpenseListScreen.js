@@ -1,300 +1,395 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
+  View, Text, SectionList, TouchableOpacity, TextInput,
+  StyleSheet, Alert, Animated, Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { getExpenses, deleteExpense, getCategoryMeta } from '../utils/storage';
+import { getExpenses, deleteExpense, CATEGORIES } from '../utils/storage';
+import Shimmer from '../components/ui/Shimmer';
+import FadeSlideIn from '../components/ui/FadeSlideIn';
+import { colors, shadows, radius, typography } from '../theme';
 
-export default function ExpenseListScreen() {
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [statusType, setStatusType] = useState('success');
+const getCategoryMeta = (label) =>
+  CATEGORIES.find(c => c.label === label) || CATEGORIES[CATEGORIES.length - 1];
 
-  const showStatus = (text, type = 'success') => {
-    setStatusMessage(text);
-    setStatusType(type);
-    setTimeout(() => setStatusMessage(''), 3000);
+function groupByDate(expenses) {
+  const now   = new Date(); now.setHours(0, 0, 0, 0);
+  const yest  = new Date(now); yest.setDate(now.getDate() - 1);
+  const wkAgo = new Date(now); wkAgo.setDate(now.getDate() - 7);
+  const b = { Today: [], Yesterday: [], 'This Week': [], Earlier: [] };
+  expenses.forEach(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    if (d >= now)       b.Today.push(e);
+    else if (d >= yest) b.Yesterday.push(e);
+    else if (d >= wkAgo) b['This Week'].push(e);
+    else                b.Earlier.push(e);
+  });
+  return Object.entries(b)
+    .filter(([, v]) => v.length > 0)
+    .map(([title, data]) => ({ title, data }));
+}
+
+const FILTERS = [
+  { key: 'All',   label: 'All' },
+  { key: 'Month', label: 'Month' },
+  { key: 'Year',  label: 'Year' },
+];
+
+function SearchBar({ value, onChangeText }) {
+  const [focused, setFocused] = useState(false);
+  const borderAnim = useRef(new Animated.Value(0)).current;
+
+  const onFocus = () => {
+    setFocused(true);
+    Animated.timing(borderAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+  };
+  const onBlur = () => {
+    setFocused(false);
+    Animated.timing(borderAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      const load = async () => {
-        setLoading(true);
-        const data = await getExpenses();
-        const sorted = [...data].sort((a, b) => new Date(b.date) - new Date(a.date));
-        setExpenses(sorted);
-        setLoading(false);
-      };
-      load();
-    }, [])
+  const borderColor = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border, colors.violet],
+  });
+
+  return (
+    <Animated.View style={[S.searchBar, { borderColor }]}>
+      <Ionicons name="search" size={17} color={focused ? colors.violet : colors.textMuted} style={{ marginRight: 8 }} />
+      <TextInput
+        style={S.searchInput}
+        placeholder="Search transactions…"
+        placeholderTextColor={colors.textDisabled}
+        value={value}
+        onChangeText={onChangeText}
+        selectionColor={colors.violet}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />
+      {value.length > 0 && (
+        <TouchableOpacity onPress={() => onChangeText('')} activeOpacity={0.6}>
+          <Ionicons name="close-circle" size={17} color={colors.textMuted} />
+        </TouchableOpacity>
+      )}
+    </Animated.View>
   );
+}
+
+function ExpenseRow({ item, isLast, onDelete }) {
+  const meta   = getCategoryMeta(item.category);
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  const slideX = useRef(new Animated.Value(-10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeIn, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: 0,  duration: 280, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const fmtDate = (s) => {
+    try {
+      return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch { return s; }
+  };
+
+  return (
+    <Animated.View style={{ opacity: fadeIn, transform: [{ translateX: slideX }] }}>
+      <View style={[S.cell, !isLast && S.cellBorder]}>
+        <View style={[S.cellIcon, { backgroundColor: meta.color + '22' }]}>
+          <Text style={{ fontSize: 20 }}>{meta.icon}</Text>
+        </View>
+        <View style={S.cellBody}>
+          <Text style={S.cellTitle} numberOfLines={1}>
+            {item.note || item.category}
+          </Text>
+          <Text style={S.cellSub}>{item.category}</Text>
+        </View>
+        <View style={S.cellRight}>
+          <Text style={S.cellAmt}>${parseFloat(item.amount).toFixed(2)}</Text>
+          <Text style={S.cellDate}>{fmtDate(item.date)}</Text>
+        </View>
+        <TouchableOpacity
+          style={S.trashBtn}
+          onPress={onDelete}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close" size={13} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
+export default function ExpenseListScreen() {
+  const [all, setAll]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]  = useState('');
+  const [filter, setFilter]  = useState('All');
+  const [toast, setToast]    = useState(null);
+
+  const showToast = (msg, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  useFocusEffect(useCallback(() => {
+    const load = async () => {
+      setLoading(true);
+      const data = await getExpenses();
+      setAll([...data].sort((a, b) => new Date(b.date) - new Date(a.date)));
+      setLoading(false);
+    };
+    load();
+  }, []));
 
   const performDelete = async (id) => {
     try {
       await deleteExpense(id);
-      setExpenses((prev) => prev.filter((item) => item.id !== id));
-      showStatus('Expense deleted successfully.', 'success');
-    } catch (error) {
-      showStatus('Failed to delete expense.', 'error');
+      setAll(prev => prev.filter(item => item.id !== id));
+      showToast('Expense deleted.', true);
+    } catch {
+      showToast('Could not delete.', false);
     }
   };
 
-  const handleDelete = (id, category, amount) => {
+  const confirmDelete = (id, category, amount) => {
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Delete $${parseFloat(amount).toFixed(2)} for ${category}?`);
-      if (confirmed) {
-        performDelete(id);
-      }
+      if (window.confirm(`Delete $${parseFloat(amount).toFixed(2)} for ${category}?`)) performDelete(id);
       return;
     }
-
     Alert.alert(
       'Delete Expense',
-      `Delete $${parseFloat(amount).toFixed(2)} for ${category}?`,
+      `Remove $${parseFloat(amount).toFixed(2)} from ${category}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => performDelete(id),
-        },
+        { text: 'Delete', style: 'destructive', onPress: () => performDelete(id) },
       ]
     );
   };
 
-  const formatDate = (dateStr) => {
-    try {
-      const d = new Date(dateStr + 'T00:00:00');
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch {
-      return dateStr;
+  const now = new Date();
+  const filtered = all.filter(e => {
+    if (filter === 'Month') {
+      const d = new Date(e.date);
+      if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return false;
+    } else if (filter === 'Year') {
+      if (new Date(e.date).getFullYear() !== now.getFullYear()) return false;
     }
-  };
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return e.category.toLowerCase().includes(q) || (e.note || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const sections = groupByDate(filtered);
+  const total    = filtered.reduce((s, e) => s + e.amount, 0);
+
+  const renderItem = ({ item, index, section }) => (
+    <ExpenseRow
+      item={item}
+      isLast={index === section.data.length - 1}
+      onDelete={() => confirmDelete(item.id, item.category, item.amount)}
+    />
+  );
+
+  const renderSectionHeader = ({ section: { title, data } }) => (
+    <View style={S.sectionHead}>
+      <Text style={S.sectionHeadText}>{title}</Text>
+      <View style={S.sectionCount}>
+        <Text style={S.sectionCountText}>{data.length}</Text>
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6C63FF" />
+      <View style={[S.container, { padding: 20, paddingTop: 16 }]}>
+        <Shimmer w="100%" h={48} r={radius.md} style={{ marginBottom: 16 }} />
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+          {FILTERS.map(f => <Shimmer key={f.key} w={80} h={36} r={radius.md} />)}
+        </View>
+        {[1,2,3,4,5].map(i => (
+          <View key={i} style={[S.cell, { marginBottom: 2 }]}>
+            <Shimmer w={44} h={44} r={14} style={{ marginRight: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Shimmer w="50%" h={14} r={7} style={{ marginBottom: 8 }} />
+              <Shimmer w="35%" h={11} r={6} />
+            </View>
+            <Shimmer w={58} h={16} r={8} />
+          </View>
+        ))}
       </View>
     );
   }
-
-  if (expenses.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>💸</Text>
-        <Text style={styles.emptyTitle}>No Expenses Yet</Text>
-        <Text style={styles.emptySubtitle}>Tap "Add Expense" to record your first expense.</Text>
-      </View>
-    );
-  }
-
-  const renderItem = ({ item }) => {
-    const meta = getCategoryMeta(item.category);
-    return (
-      <View style={styles.item}>
-        <View style={styles.itemLeft}>
-          <View style={[styles.badge, { backgroundColor: meta.color }]}>
-            <Text style={styles.badgeIcon}>{meta.icon}</Text>
-            <Text style={styles.badgeText}>{item.category}</Text>
-          </View>
-          <View style={styles.itemDetails}>
-            <Text style={styles.itemDate}>{formatDate(item.date)}</Text>
-            {item.note ? <Text style={styles.itemNote} numberOfLines={1}>{item.note}</Text> : null}
-          </View>
-        </View>
-        <View style={styles.itemRight}>
-          <Text style={styles.itemAmount}>${parseFloat(item.amount).toFixed(2)}</Text>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDelete(item.id, item.category, item.amount)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
 
   return (
-    <View style={styles.container}>
-      {statusMessage ? (
-        <View style={[styles.statusBox, statusType === 'success' ? styles.successBox : styles.errorBox]}>
-          <Text style={[styles.statusText, statusType === 'success' ? styles.successText : styles.errorText]}>
-            {statusMessage}
-          </Text>
+    <View style={S.container}>
+
+      {toast && (
+        <FadeSlideIn dy={-6}>
+          <View style={[S.toast, toast.ok ? S.toastOk : S.toastErr]}>
+            <Ionicons
+              name={toast.ok ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+              size={15}
+              color={toast.ok ? colors.success : colors.error}
+              style={{ marginRight: 7 }}
+            />
+            <Text style={[S.toastText, { color: toast.ok ? colors.success : colors.error }]}>{toast.msg}</Text>
+          </View>
+        </FadeSlideIn>
+      )}
+
+      <FadeSlideIn delay={0}>
+        <SearchBar value={search} onChangeText={setSearch} />
+      </FadeSlideIn>
+
+      {/* Filter chips + total */}
+      <FadeSlideIn delay={60}>
+        <View style={S.filterBar}>
+          <View style={S.filterGroup}>
+            {FILTERS.map(f => (
+              <TouchableOpacity
+                key={f.key}
+                style={[S.filterBtn, filter === f.key && S.filterBtnOn]}
+                onPress={() => setFilter(f.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[S.filterText, filter === f.key && S.filterTextOn]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={S.totalBadge}>
+            <Text style={S.totalBadgeText}>${total.toFixed(2)}</Text>
+          </View>
         </View>
-      ) : null}
-      <FlatList
-        data={expenses}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListHeaderComponent={
-          <Text style={styles.listHeader}>
-            {expenses.length} Expense{expenses.length !== 1 ? 's' : ''} Total
-          </Text>
-        }
-      />
+      </FadeSlideIn>
+
+      {filtered.length === 0 ? (
+        <FadeSlideIn delay={100}>
+          <View style={S.empty}>
+            <Ionicons name="wallet-outline" size={52} color={colors.textMuted} style={{ opacity: 0.4, marginBottom: 16 }} />
+            <Text style={S.emptyTitle}>{search ? 'No results' : 'No Transactions'}</Text>
+            <Text style={S.emptySub}>
+              {search ? 'Try a different search.' : 'Tap + to add your first expense.'}
+            </Text>
+          </View>
+        </FadeSlideIn>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={item => String(item.id)}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          contentContainerStyle={S.listContent}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+const S = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+
+  toast: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 20, marginTop: 12, padding: 12,
+    borderRadius: radius.md, borderWidth: 1,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    padding: 32,
+  toastOk:  { backgroundColor: colors.successLight, borderColor: colors.successBorder },
+  toastErr: { backgroundColor: colors.errorLight,   borderColor: colors.errorBorder },
+  toastText:{ ...typography.captionMedium },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginHorizontal: 20, marginTop: 16,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderWidth: 1.5, ...shadows.sm,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+  searchInput: {
+    flex: 1, ...typography.body,
+    color: colors.textPrimary, padding: 0,
   },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+
+  filterBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, marginTop: 12, marginBottom: 4,
   },
-  emptySubtitle: {
-    fontSize: 15,
-    color: '#888',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  listHeader: {
-    fontSize: 13,
-    color: '#888',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  item: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
+  filterGroup: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md, padding: 3, gap: 2,
+    borderWidth: 1, borderColor: colors.border,
+    ...shadows.sm,
   },
-  itemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+  filterBtn:    { borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
+  filterBtnOn:  { backgroundColor: colors.violet },
+  filterText:   { ...typography.captionMedium, color: colors.textMuted },
+  filterTextOn: { ...typography.captionBold, color: '#0f1117' },
+
+  totalBadge: {
+    marginLeft: 'auto',
+    backgroundColor: colors.violetTint2,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1, borderColor: colors.borderStrong,
   },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginRight: 12,
-    minWidth: 90,
+  totalBadgeText: { ...typography.captionBold, color: colors.violet },
+
+  listContent: { paddingHorizontal: 20, paddingBottom: 60, paddingTop: 8 },
+
+  sectionHead: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 2,
   },
-  badgeIcon: {
-    fontSize: 13,
-    marginRight: 4,
+  sectionHeadText: {
+    ...typography.captionBold, color: colors.textPrimary,
+    textTransform: 'uppercase', letterSpacing: 0.8, flex: 1,
   },
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+  sectionCount: {
+    backgroundColor: colors.surface, borderRadius: radius.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: colors.border,
   },
-  itemDetails: {
-    flex: 1,
+  sectionCountText: { ...typography.label, fontSize: 11, color: colors.textMuted },
+
+  cell: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: radius.lg, marginBottom: 2,
+    borderWidth: 1, borderColor: colors.border,
+    ...shadows.sm,
   },
-  itemDate: {
-    fontSize: 14,
-    color: '#444',
-    fontWeight: '500',
+  cellBorder: {
+    borderBottomWidth: 0,
+    borderBottomRightRadius: 0, borderBottomLeftRadius: 0,
+    shadowOpacity: 0, elevation: 0,
   },
-  itemNote: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+  cellIcon: {
+    width: 42, height: 42, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12,
   },
-  itemRight: {
-    alignItems: 'flex-end',
+  cellBody:  { flex: 1, minWidth: 0 },
+  cellTitle: { ...typography.captionMedium, color: colors.textPrimary },
+  cellSub:   { ...typography.label, fontSize: 10, color: colors.textMuted, marginTop: 3 },
+  cellRight: { alignItems: 'flex-end', marginRight: 8 },
+  cellAmt:   { ...typography.captionBold, color: colors.violet },
+  cellDate:  { ...typography.label, fontSize: 10, color: colors.textMuted, marginTop: 3 },
+  trashBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  itemAmount: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#6C63FF',
-    marginBottom: 6,
-  },
-  deleteButton: {
-    backgroundColor: '#FF4444',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  deleteButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  statusBox: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  successBox: {
-    backgroundColor: '#E8F6EF',
-    borderColor: '#7FD1A7',
-  },
-  errorBox: {
-    backgroundColor: '#FDECEA',
-    borderColor: '#F1A6A0',
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  successText: {
-    color: '#1B6E37',
-  },
-  errorText: {
-    color: '#A33A3A',
-  },
-  separator: {
-    height: 10,
-  },
+
+  empty:      { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 60 },
+  emptyTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: 8 },
+  emptySub:   { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
 });
