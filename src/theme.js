@@ -2,32 +2,32 @@
 // Fonts: DM Sans (body) + JetBrains Mono (labels, numbers, mono text)
 
 export const colors = {
-  // Primary — teal
-  violet:        '#00c9a7',
-  violetLight:   '#33d4b7',
-  violetFade:    '#66dfca',
-  violetTint:    'rgba(0,201,167,0.15)',
-  violetTint2:   'rgba(0,201,167,0.10)',
-  violetGlow:    '#007a65',
+  // Primary — amber gold (The Ledger accent)
+  violet:        '#D4943A',
+  violetLight:   '#E0AD63',
+  violetFade:    '#ECC88A',
+  violetTint:    'rgba(212,148,58,0.12)',
+  violetTint2:   'rgba(212,148,58,0.08)',
+  violetGlow:    '#8A5C1A',
 
-  // Dark surfaces (from Figma theme.css :root)
-  bg:            '#08090d',   // --background
-  surface:       '#0f1117',   // --card
-  surface2:      '#161920',   // --popover / --input-background
+  // Warm obsidian surfaces
+  bg:            '#100D09',
+  surface:       '#181410',
+  surface2:      '#1F1A14',
 
-  // Text
-  textPrimary:   '#e8eaf0',   // --foreground / --card-foreground
-  textSecondary: '#a0a4b8',   // --secondary-foreground
-  textMuted:     '#6b6f85',   // --muted-foreground
-  textDisabled:  '#3d4155',
+  // Text — warm ivory
+  textPrimary:   '#EDE8E0',
+  textSecondary: '#A09080',
+  textMuted:     '#6B5F52',
+  textDisabled:  '#3D3228',
 
-  // Borders
-  border:        'rgba(255,255,255,0.07)',  // --border
-  borderStrong:  'rgba(0,201,167,0.25)',
+  // Borders — warm tinted
+  border:        'rgba(255,240,220,0.06)',
+  borderStrong:  'rgba(212,148,58,0.28)',
 
-  // Accent (amber — from Figma --accent)
-  accent:        '#f59e0b',
-  accentLight:   'rgba(245,158,11,0.14)',
+  // Accent
+  accent:        '#D4943A',
+  accentLight:   'rgba(212,148,58,0.14)',
 
   // Status
   success:       '#10B981',
@@ -61,7 +61,7 @@ export const shadows = {
     elevation: 8,
   },
   hero: {
-    shadowColor: '#00c9a7',
+    shadowColor: '#D4943A',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 24,

@@ -25,7 +25,7 @@ function Field({ label, icon, value, onChangeText, secureEntry, rightSlot, ...pr
 
   const borderColor = anim.interpolate({
     inputRange:  [0, 1],
-    outputRange: [colors.border, colors.violet],
+    outputRange: [colors.border, 'rgba(255,240,220,0.18)'],
   });
   const bgColor = anim.interpolate({
     inputRange:  [0, 1],
@@ -39,7 +39,7 @@ function Field({ label, icon, value, onChangeText, secureEntry, rightSlot, ...pr
         <Ionicons
           name={icon}
           size={18}
-          color={focused ? colors.violet : colors.textMuted}
+          color={colors.textSecondary}
           style={S.inputIcon}
         />
         <TextInput
@@ -96,7 +96,7 @@ export default function LoginScreen({ onLogin, onGoSignup }) {
             <Ionicons name="wallet" size={38} color={colors.violet} />
           </View>
           <Text style={S.heroTitle}>EXPNS</Text>
-          <Text style={S.heroSub}>Track every dollar, own your future.</Text>
+          <Text style={S.heroSub}>Smart spending. Brighter future.</Text>
         </View>
 
         {/* Form card */}
@@ -135,7 +135,7 @@ export default function LoginScreen({ onLogin, onGoSignup }) {
               secureEntry={!showPw}
               rightSlot={
                 <TouchableOpacity onPress={() => setShowPw(!showPw)} style={S.eyeBtn}>
-                  <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+                  <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               }
             />
@@ -228,6 +228,7 @@ const S = StyleSheet.create({
   input: {
     flex: 1, ...typography.body,
     color: colors.textPrimary, paddingVertical: 14,
+    outlineStyle: 'none',
   },
   eyeBtn: { padding: 4 },
 

@@ -3,8 +3,57 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js/dist/index.cjs';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config';
 
-const STORAGE_KEY = '@expenses';
-const SAVINGS_KEY  = '@savings';
+const STORAGE_KEY   = '@expenses';
+const SAVINGS_KEY   = '@savings';
+const CURRENCY_KEY  = '@currency';
+
+export const CURRENCIES = [
+  { code: 'USD', symbol: '$',  rate: 1       },
+  { code: 'EUR', symbol: '€',  rate: 0.92    },
+  { code: 'GBP', symbol: '£',  rate: 0.79    },
+  { code: 'INR', symbol: '₹',  rate: 83.5    },
+  { code: 'JPY', symbol: '¥',  rate: 149.5   },
+];
+
+// Synchronous read from localStorage — only used as the immediate initial state on web
+// to prevent a USD flash before the async load completes.
+export const getCurrencySync = () => {
+  if (Platform.OS === 'web') {
+    try {
+      const code = localStorage.getItem(CURRENCY_KEY);
+      return CURRENCIES.find(c => c.code === code) || CURRENCIES[0];
+    } catch { return CURRENCIES[0]; }
+  }
+  return CURRENCIES[0];
+};
+
+// Full load: Supabase user metadata first (survives incognito / new devices),
+// then falls back to local storage.
+export const getCurrency = async () => {
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      const code = data?.user?.user_metadata?.currency;
+      if (code) {
+        // Keep local cache in sync
+        try { await store.setItem(CURRENCY_KEY, code); } catch {}
+        return CURRENCIES.find(c => c.code === code) || CURRENCIES[0];
+      }
+    } catch {}
+  }
+  try {
+    const code = await store.getItem(CURRENCY_KEY);
+    return CURRENCIES.find(c => c.code === code) || CURRENCIES[0];
+  } catch { return CURRENCIES[0]; }
+};
+
+// Save to both Supabase metadata and local storage so it persists everywhere.
+export const setCurrency = async (code) => {
+  try { await store.setItem(CURRENCY_KEY, code); } catch {}
+  if (supabase) {
+    try { await supabase.auth.updateUser({ data: { currency: code } }); } catch {}
+  }
+};
 
 export const supabase =
   SUPABASE_URL && SUPABASE_ANON_KEY
@@ -36,15 +85,15 @@ export const SAVINGS_CATEGORIES = [
 ];
 
 export const CATEGORIES = [
-  { label: 'Food & Drink',  icon: 'restaurant-outline',  color: '#f59e0b' },
-  { label: 'Transport',     icon: 'car-outline',          color: '#6366f1' },
-  { label: 'Shopping',      icon: 'bag-handle-outline',   color: '#ec4899' },
-  { label: 'Housing',       icon: 'home-outline',         color: '#3b82f6' },
-  { label: 'Utilities',     icon: 'flash-outline',        color: '#10b981' },
-  { label: 'Health',        icon: 'medical-outline',      color: '#ef4444' },
-  { label: 'Entertainment', icon: 'cafe-outline',         color: '#00c9a7' },
-  { label: 'Fitness',       icon: 'barbell-outline',      color: '#a855f7' },
-  { label: 'Other',         icon: 'grid-outline',         color: '#8E8E93' },
+  { label: 'Food & Drink',  icon: 'restaurant-outline',  color: '#C17B4E' },
+  { label: 'Transport',     icon: 'car-outline',          color: '#7B8FA8' },
+  { label: 'Shopping',      icon: 'bag-handle-outline',   color: '#B8766A' },
+  { label: 'Housing',       icon: 'home-outline',         color: '#7A9E87' },
+  { label: 'Utilities',     icon: 'flash-outline',        color: '#A89060' },
+  { label: 'Health',        icon: 'medical-outline',      color: '#B87070' },
+  { label: 'Entertainment', icon: 'cafe-outline',         color: '#9B7BB0' },
+  { label: 'Fitness',       icon: 'barbell-outline',      color: '#8FAE9E' },
+  { label: 'Other',         icon: 'grid-outline',         color: '#7A7870' },
 ];
 
 export const getCategoryMeta = (label) =>
@@ -181,7 +230,7 @@ export const deleteExpense = async (id) => {
   return updated;
 };
 
-// ── Savings (local AsyncStorage only) ────────────────────────────────────────
+// ── Savings ───────────────────────────────────────────────────────────────────
 
 const savingsGetAll = async () => {
   try {
@@ -197,10 +246,30 @@ const savingsSaveAll = async (items) => {
 };
 
 export const getSavings = async () => {
+  if (supabase) {
+    try {
+      const session = await getSession();
+      const userId = session?.user?.id;
+      let query = supabase.from('savings').select('*').order('date', { ascending: false });
+      if (userId) query = query.eq('user_id', userId);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const items = data.map((item) => ({ ...item, amount: Number(item.amount) }));
+        await savingsSaveAll(items);
+        return items;
+      }
+    } catch (e) {
+      console.warn('Supabase getSavings failed, using local storage:', e.message);
+    }
+  }
   return savingsGetAll();
 };
 
 export const addSaving = async ({ name, category, amount, date, note }) => {
+  const session = await getSession();
+  const userId = session?.user?.id;
+
   const item = {
     id: Date.now(),
     name: name || '',
@@ -208,16 +277,44 @@ export const addSaving = async ({ name, category, amount, date, note }) => {
     amount: parseFloat(amount),
     date,
     note: note || '',
+    user_id: userId || null,
   };
-  const all = await savingsGetAll();
-  await savingsSaveAll([item, ...all]);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('savings').insert([item]);
+      if (error) throw error;
+      const local = await savingsGetAll();
+      await savingsSaveAll([item, ...local]);
+      return item;
+    } catch (e) {
+      console.warn('Supabase addSaving failed, using local storage:', e.message);
+    }
+  }
+
+  const local = await savingsGetAll();
+  await savingsSaveAll([item, ...local]);
   return item;
 };
 
 export const deleteSaving = async (id) => {
   const idNum = Number(id);
-  const all = await savingsGetAll();
-  const updated = all.filter((s) => Number(s.id) !== idNum);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('savings').delete().eq('id', idNum);
+      if (error) throw error;
+      const local = await savingsGetAll();
+      const updated = local.filter((s) => Number(s.id) !== idNum);
+      await savingsSaveAll(updated);
+      return updated;
+    } catch (e) {
+      console.warn('Supabase deleteSaving failed, using local storage:', e.message);
+    }
+  }
+
+  const local = await savingsGetAll();
+  const updated = local.filter((s) => Number(s.id) !== idNum);
   await savingsSaveAll(updated);
   return updated;
 };
