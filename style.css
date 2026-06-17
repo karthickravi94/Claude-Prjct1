@@ -237,18 +237,20 @@ h2.center { text-align: center; }
   padding: 2.5rem 2rem;
   text-align: center;
 }
-.coach-initials {
-  width: 90px; height: 90px;
-  background: linear-gradient(135deg, var(--green-dark), var(--green));
+.coach-photo-wrap {
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Oswald', sans-serif;
-  font-size: 2rem;
-  font-weight: 700;
-  color: white;
+  overflow: hidden;
   margin: 0 auto 1.2rem;
+  border: 3px solid var(--green);
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.15);
+}
+.coach-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
 }
 .coach-card h3 { font-size: 1.4rem; margin-bottom: 0.3rem; }
 .coach-card > p { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
